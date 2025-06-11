@@ -1,9 +1,14 @@
- # Secure VPS Initialization Script
+ # VPS Setup and Configuration Scripts
 
-This script provides a comprehensive security setup for Ubuntu LTS VPS servers, including user management, SSH hardening, firewall configuration, and more.
+This repository contains scripts for setting up and configuring a secure Ubuntu LTS VPS with Docker and Traefik.
 
-## Features
+## Available Scripts
 
+### 1. Server Setup Script (`server.sh`)
+
+The main initialization script that provides comprehensive security setup for Ubuntu LTS VPS servers.
+
+#### Features:
 1. System Updates: Ensures all packages are current
 2. Sudo User: Creates a new user with sudo privileges
 3. SSH Hardening: Disables root login, password auth, and sets a custom port
@@ -13,6 +18,17 @@ This script provides a comprehensive security setup for Ubuntu LTS VPS servers, 
 7. Automatic Updates: Enables unattended security upgrades
 8. Docker & Swarm: Installs Docker Engine and initializes Swarm mode
 9. Lynis: Installs security auditing tool and performs baseline scan
+
+### 2. Traefik Setup Script (`traefik.sh`)
+
+Sets up Traefik v3 as a secure reverse proxy for Docker Swarm with automatic HTTPS via Let's Encrypt.
+
+#### Features:
+1. Automatic HTTPS with Let's Encrypt
+2. Secure Traefik dashboard with authentication
+3. Docker Swarm network configuration
+4. Best practices from Docker Swarm Rocks
+5. Custom domain and email configuration
 
 ## Prerequisites
 
@@ -36,13 +52,53 @@ Before running the script, you must:
 
    # On Linux/macOS:
    cat ~/.ssh/id_ed25519.pub
+   ```   Copy the output - you'll need to paste this when the script asks for it.
+
+## Getting Started
+
+### 1. Get the Scripts
+
+First, get the scripts onto your VPS using one of these methods:
+
+#### Method 1: Clone from GitHub (Recommended)
+
+1. Connect to your VPS:
+   ```bash
+   ssh root@your-server-ip
    ```
 
-   Copy the output - you'll need to paste this when the script asks for it.
+2. Install git:
+   ```bash
+   apt update && apt install git -y
+   ```
 
-## Usage
+3. Clone this repository:
+   ```bash
+   git clone https://github.com/yourusername/linux.git
+   cd linux
+   ```
 
-1. Upload the script to your VPS:
+4. Make scripts executable:
+   ```bash
+   chmod +x *.sh
+   ```
+
+#### Method 2: Manual Upload
+
+If you prefer to upload the scripts manually:
+
+1. Upload the scripts to your VPS:
+   ```bash
+   # On Windows (PowerShell):
+   scp *.sh root@your-server-ip:/root/
+
+   # On Linux/macOS:
+   scp *.sh root@your-server-ip:/root/
+   ```
+
+### 2. Run the Scripts
+
+1. First, run the server setup script:
    ```bash
    # On Windows (PowerShell):
    scp server.sh root@your-server-ip:/root/
@@ -66,9 +122,14 @@ Before running the script, you must:
    sudo ./server.sh
    ```
 
-5. Follow the prompts to:
+2. Follow the prompts to:
    - Enter a username for the new sudo user
    - Paste your SSH public key when prompted
+
+3. After the server setup is complete, you can run the Traefik setup:
+   ```bash
+   ./traefik.sh
+   ```
 
 ## After Installation
 
