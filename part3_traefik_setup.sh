@@ -1,11 +1,8 @@
 #!/bin/bash
 
-# PART 3: TRAEFIK DEPLOYMENT (v7 - The Definitive Fix)
+# PART 3: TRAEFIK DEPLOYMENT (v5 - TCP Enabled)
 #
-# FIX: Adds a 'traefik.http.services.traefik.loadbalancer.server.port' label.
-#      This directly resolves the "port is missing" error from the Swarm provider,
-#      allowing it to correctly process the dashboard router labels. This is the
-#      root cause of the 404/502 errors.
+# UPDATE: Adds a new TCP entrypoint for PostgreSQL on port 5432.
 #
 # This script deploys Traefik using a clean configuration.
 # It MUST be run as the non-root 'deploy' user.
@@ -16,12 +13,11 @@ ACME_VOLUME="traefik-acme"
 LOG_VOLUME="traefik-logs"
 STACK_NAME="traefik"
 COMPOSE_FILE="traefik.yml"
-DEFAULT_TRAEFIK_VERSION="v3.0" # Fallback version
+DEFAULT_TRAEFIK_VERSION="v3.0"
 
 # --- Pre-flight Checks ---
 if ! docker info > /dev/null 2>&1; then
   echo "Error: Docker is not running or you don't have permission to use it."
-  echo "Please ensure you have logged out and back in after running part 2."
   exit 1
 fi
 
@@ -47,14 +43,7 @@ echo "----------------------------------------------------"
 echo
 
 # --- Script Execution ---
-
-# 1. Generate hashed password for dashboard
-echo "### Generating hashed password for dashboard... ###"
 HASHED_PASSWORD=$(openssl passwd -apr1 "$DASHBOARD_PASS" | sed 's/\$/\$\$/g')
-echo "Password hash generated and escaped."
-echo
-
-# 2. Create the traefik.yml file
 echo "### Creating Docker Compose file: $COMPOSE_FILE... ###"
 cat > "$COMPOSE_FILE" <<EOF
 # traefik.yml
@@ -70,6 +59,10 @@ services:
       - target: 443
         published: 443
         mode: host
+      # Expose the Postgres port
+      - target: 5432
+        published: 5432
+        mode: host
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - $ACME_VOLUME:/etc/traefik/acme
@@ -81,9 +74,11 @@ services:
       - "--providers.swarm=true"
       - "--providers.swarm.exposedByDefault=false"
       - "--entrypoints.web.address=:80"
+      - "--entrypoints.websecure.address=:443"
+      # --- NEW: Define the Postgres TCP Entrypoint ---
+      - "--entrypoints.postgres.address=:5432"
       - "--entrypoints.web.http.redirections.entrypoint.to=websecure"
       - "--entrypoints.web.http.redirections.entrypoint.scheme=https"
-      - "--entrypoints.websecure.address=:443"
       - "--certificatesresolvers.myresolver.acme.email=$LETSENCRYPT_EMAIL"
       - "--certificatesresolvers.myresolver.acme.storage=/etc/traefik/acme/acme.json"
       - "--certificatesresolvers.myresolver.acme.httpchallenge=true"
@@ -100,13 +95,8 @@ services:
           - node.role == manager
       labels:
         - "traefik.enable=true"
-        # --- THE FINAL FIX ---
-        # 1. This label satisfies the Swarm provider's "port is missing" check.
-        - "traefik.http.services.traefik.loadbalancer.server.port=8080"
-        # 2. This router correctly points to the internal API service.
-        - "traefik.http.routers.dashboard.service=api@internal"
-        # 3. The rest of the router and middleware configuration.
         - "traefik.http.routers.dashboard.rule=Host(\`$TRAEFIK_DOMAIN\`)"
+        - "traefik.http.routers.dashboard.service=api@internal"
         - "traefik.http.routers.dashboard.tls=true"
         - "traefik.http.routers.dashboard.tls.certresolver=myresolver"
         - "traefik.http.routers.dashboard.middlewares=auth"
@@ -125,21 +115,6 @@ EOF
 echo "Compose file created."
 echo
 
-# 3. Deploy the Traefik stack
 echo "### Deploying Traefik stack '$STACK_NAME'... ###"
 docker stack deploy -c "$COMPOSE_FILE" "$STACK_NAME"
-echo
-
-# --- Final Instructions ---
-echo "####################################################################"
-echo "###          PART 3 (TRAEFIK DEPLOYMENT) COMPLETE!               ###"
-echo "####################################################################"
-echo
-echo "It may take a minute for the service to be available."
-echo "You can check the status with the command: docker stack ps $STACK_NAME"
-echo "To see the logs, you must now check the log file inside the volume."
-echo "Example: sudo docker exec \$(docker ps -q --filter 'name=traefik_traefik') cat /var/log/traefik/traefik.log"
-echo
-echo "Once running, access the Traefik dashboard at:"
-echo "https://$TRAEFIK_DOMAIN"
-echo
+echo "### Traefik deployment complete. ###"

@@ -1,165 +1,99 @@
- # VPS Setup and Configuration Scripts
+# Secure VPS Initialization & Docker Swarm Deployment
 
-This repository contains a set of modular scripts for setting up and configuring a secure Ubuntu LTS VPS with Docker, Traefik, and Portainer.
+This project provides a set of scripts to automate the provisioning and hardening of a new Ubuntu LTS server, culminating in a production-ready Docker Swarm environment managed by a secure Traefik reverse proxy.
 
-## Available Scripts
+The entire process is designed to be repeatable, secure, and based on modern Infrastructure as Code (IaC) principles.
 
-The setup is divided into four parts that should be run in sequence:
+## Core Philosophy
 
-### 1. Root Server Setup (`part1_root_setup.sh`)
+This setup is built on several key professional practices:
 
-Initial server security setup and user configuration.
-
-#### Features:
-1. System Updates: Ensures all packages are current
-2. Sudo User: Creates a new user with sudo privileges
-3. SSH Hardening: Disables root login, password auth, and sets a custom port
-4. UFW Firewall: Configures a stateful firewall with SSH rate-limiting
-5. Fail2ban: Protects against brute-force attacks
-6. auditd: Installs and configures Linux Audit Daemon
-7. Automatic Updates: Enables unattended security upgrades
-
-### 2. Docker Setup (`part2_docker_setup.sh`)
-
-Installs and configures Docker with Swarm mode.
-
-#### Features:
-1. Docker Engine installation
-2. Docker Compose plugin installation
-3. Docker Swarm initialization
-4. Security best practices configuration
-5. User group permissions setup
-
-### 3. Traefik Setup (`part3_traefik_setup.sh`)
-
-Sets up Traefik v3 as a secure reverse proxy.
-
-#### Features:
-1. Automatic HTTPS with Let's Encrypt
-2. Secure Traefik dashboard with authentication
-3. Docker Swarm network configuration
-4. Best practices from Docker Swarm Rocks
-5. Custom domain and email configuration
-
-### 4. Portainer Setup (`part4_portainer_setup.sh`)
-
-Deploys Portainer for Docker management.
-
-#### Features:
-1. Portainer CE installation
-2. Secure web interface setup
-3. Docker Swarm integration
-4. Automatic HTTPS via Traefik
-5. Container management interface
+*   **Separation of Concerns:** The process is split into distinct parts. System hardening (`root` user tasks) is separate from application environment setup (`deploy` user tasks), which is separate from application deployment. This makes the system cleaner and easier to manage.
+*   **Infrastructure as Code (IaC):** This Git repository is the **single source of truth**. The state of the server is defined by code, not by manual actions. This ensures consistency and enables perfect disaster recovery.
+*   **Security by Default:** The scripts apply a strong security baseline from the start, including a hardened SSH configuration, a restrictive firewall, and the principle of least privilege for user accounts.
+*   **Modern Docker Practices:** We use Docker-managed named volumes to avoid host-level permission issues and Docker Secrets to securely manage sensitive data like passwords, which are never stored in configuration files.
 
 ## Prerequisites
 
-Before running the script, you must:
+Before you begin, you will need:
 
-1. Generate an SSH key pair on your **local** machine:
+1.  A fresh VPS running the latest Ubuntu LTS.
+2.  An SSH key pair generated on your **local computer**.
+3.  A domain name that you own.
+4.  Your DNS provider configured with an **A record** pointing your domain (e.g., `traefik.yourdomain.com`) to your VPS's public IP address.
 
-   ```bash
-   # On Windows (PowerShell):
-   ssh-keygen -t ed25519 -f "$env:USERPROFILE\.ssh\id_ed25519"
+## Execution Plan
 
-   # On Linux/macOS:
-   ssh-keygen -t ed25519
-   ```
+Follow these steps in order. Do not skip any steps.
 
-2. Get your public key:
+### Part 1: Initial Server Hardening (as `root`)
 
-   ```bash
-   # On Windows (PowerShell):
-   Get-Content "$env:USERPROFILE\.ssh\id_ed25519.pub"
+This script performs all initial system-level security hardening and creates the non-root `deploy` user.
 
-   # On Linux/macOS:
-   cat ~/.ssh/id_ed25519.pub
-   ```   Copy the output - you'll need to paste this when the script asks for it.
+1.  Log into your new VPS as the `root` user.
+2.  Create the script file: `nano part1_root_setup.sh`
+3.  Copy the content of `part1_root_setup.sh` into the file and save it.
+4.  Make the script executable: `chmod +x part1_root_setup.sh`
+5.  Run the script: `./part1_root_setup.sh`
+6.  The script will prompt you to paste the **public SSH key** for the `deploy` user.
+7.  When the script is complete, it will give you final instructions. **Follow them immediately.**
 
-## Getting Started
+**➡️ ACTION REQUIRED:** Log out of the `root` session.
 
-### 1. Get the Scripts
+### Part 2: Docker Environment Setup (as `deploy`)
 
-First, get the scripts onto your VPS using one of these methods:
+This script installs Docker and prepares the Swarm environment, including shared networks and volumes.
 
-#### Method 1: Clone from GitHub (Recommended)
+1.  Log into your VPS as the new `deploy` user with your SSH key:
+    ```bash
+    ssh -p 2222 deploy@<your_vps_ip>
+    ```
+2.  Create the script file: `nano part2_docker_setup.sh`
+3.  Copy the content of `part2_docker_setup.sh` into the file and save it.
+4.  Make the script executable: `chmod +x part2_docker_setup.sh`
+5.  Run the script: `./part2_docker_setup.sh`
+6.  The script will ask you to create a password for the `deploy` user. This password is only used for `sudo` commands.
+7.  The script will finish by preparing the Docker environment.
 
-1. Connect to your VPS:
-   ```bash
-   ssh root@your-server-ip
-   ```
+**➡️ ACTION REQUIRED:** Log out and log back in one more time. This is critical for your user's new `docker` group membership to take effect in your shell.
 
-2. Install git:
-   ```bash
-   apt update && apt install git -y
-   ```
+### Part 3: Deploy Traefik (as `deploy`)
 
-3. Clone this repository:
-   ```bash
-   git clone https://github.com/JotaSXBR/linux.git
-   cd linux
-   ```
+This script deploys the main Traefik reverse proxy.
 
-4. Make scripts executable:
-   ```bash
-   chmod +x *.sh
-   ```
+1.  Log in again as the `deploy` user. Your shell now has the correct permissions to use Docker.
+2.  Create the script file: `nano part3_traefik_setup.sh`
+3.  Copy the content of `part3_traefik_setup.sh` into the file and save it.
+4.  Make the script executable: `chmod +x part3_traefik_setup.sh`
+5.  Run the script: `./part3_traefik_setup.sh`
+6.  Follow the prompts to configure your Traefik domain, email, and dashboard credentials.
+7.  Once complete, Traefik will be running and accessible at the domain you provided.
 
-#### Method 2: Manual Upload
+### Part 4: Deploy Portainer (as `deploy`)
 
-If you prefer to upload the scripts manually:
+This script deploys the Portainer management UI.
 
-1. Upload the scripts to your VPS:
-   ```bash
-   # On Windows (PowerShell):
-   scp *.sh root@your-server-ip:/root/
+1.  Create the script file: `nano part4_portainer_setup.sh`
+2.  Copy the content of `part4_portainer_setup.sh` into the file and save it.
+3.  Make the script executable: `chmod +x part4_portainer_setup.sh`
+4.  Run the script: `./part4_portainer_setup.sh`
+5.  Follow the prompts to configure your Portainer domain.
+6.  Once complete, Portainer will be running and accessible at the domain you provided.
 
-   # On Linux/macOS:
-   scp *.sh root@your-server-ip:/root/
-   ```
+## Deploying Additional Applications
 
-### 2. Run the Scripts
+The `part4_portainer_setup.sh` and `part5_postgres_setup.sh` scripts serve as the template for all future applications. The pattern is:
 
-Run the scripts in sequence:
+1.  Create a new script (e.g., `partX_myapp_setup.sh`).
+2.  In the script, create a dedicated Docker-managed volume for your application's persistent data (`docker volume create myapp_data`).
+3.  If the application needs passwords or API keys, create Docker Secrets for them (`docker secret create ...`).
+4.  Generate a `docker-compose.yml` file that includes Traefik labels for routing and tells the service to use the volumes and secrets you created.
+5.  Deploy the stack with `docker stack deploy`.
 
-1. Root Setup:
-   ```bash
-   sudo ./part1_root_setup.sh
-   ```
-   Follow the prompts to:
-   - Enter a username for the new sudo user
-   - Paste your SSH public key when prompted
+## Day-to-Day Management
 
-2. Reconnect with your new user and run Docker setup:
-   ```bash
-   ./part2_docker_setup.sh
-   ```
+*   **Check Stack Status:** `docker stack ps <stack_name>` (e.g., `docker stack ps traefik`)
+*   **View Service Logs:** `docker service logs <stack_name>_<service_name>`
+*   **Update an Application:** To update an application's image version, edit the corresponding `partX_..._setup.sh` script, change the `image:` tag in the YAML block, and re-run the script. This ensures your Git repository always reflects the true state of your server.
 
-3. Configure Traefik:
-   ```bash
-   ./part3_traefik_setup.sh
-   ```
-   Follow the prompts to:
-   - Enter your domain name
-   - Provide your email for Let's Encrypt
-   - Set up dashboard credentials
-
-4. Deploy Portainer:
-   ```bash
-   ./part4_portainer_setup.sh
-   ```
-   Follow the prompts to:
-   - Configure initial admin password
-   - Set up Portainer domain
-
-## After Installation
-
-- The script will show you the new SSH port and connection instructions
-- Use your SSH key to connect as the new user
-- Review the Lynis security report for additional hardening suggestions
-
-## Security Notes
-
-- Never generate SSH keys on the server - always create them on your local machine
-- Keep your private key secure and never share it
-- The script disables root login and password authentication for enhanced security
+This setup provides a professional-grade foundation for hosting modern containerized applications securely and reliably.
