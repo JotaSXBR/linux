@@ -1,12 +1,14 @@
  # VPS Setup and Configuration Scripts
 
-This repository contains scripts for setting up and configuring a secure Ubuntu LTS VPS with Docker and Traefik.
+This repository contains a set of modular scripts for setting up and configuring a secure Ubuntu LTS VPS with Docker, Traefik, and Portainer.
 
 ## Available Scripts
 
-### 1. Server Setup Script (`server.sh`)
+The setup is divided into four parts that should be run in sequence:
 
-The main initialization script that provides comprehensive security setup for Ubuntu LTS VPS servers.
+### 1. Root Server Setup (`part1_root_setup.sh`)
+
+Initial server security setup and user configuration.
 
 #### Features:
 1. System Updates: Ensures all packages are current
@@ -16,12 +18,21 @@ The main initialization script that provides comprehensive security setup for Ub
 5. Fail2ban: Protects against brute-force attacks
 6. auditd: Installs and configures Linux Audit Daemon
 7. Automatic Updates: Enables unattended security upgrades
-8. Docker & Swarm: Installs Docker Engine and initializes Swarm mode
-9. Lynis: Installs security auditing tool and performs baseline scan
 
-### 2. Traefik Setup Script (`traefik.sh`)
+### 2. Docker Setup (`part2_docker_setup.sh`)
 
-Sets up Traefik v3 as a secure reverse proxy for Docker Swarm with automatic HTTPS via Let's Encrypt.
+Installs and configures Docker with Swarm mode.
+
+#### Features:
+1. Docker Engine installation
+2. Docker Compose plugin installation
+3. Docker Swarm initialization
+4. Security best practices configuration
+5. User group permissions setup
+
+### 3. Traefik Setup (`part3_traefik_setup.sh`)
+
+Sets up Traefik v3 as a secure reverse proxy.
 
 #### Features:
 1. Automatic HTTPS with Let's Encrypt
@@ -29,6 +40,17 @@ Sets up Traefik v3 as a secure reverse proxy for Docker Swarm with automatic HTT
 3. Docker Swarm network configuration
 4. Best practices from Docker Swarm Rocks
 5. Custom domain and email configuration
+
+### 4. Portainer Setup (`part4_portainer_setup.sh`)
+
+Deploys Portainer for Docker management.
+
+#### Features:
+1. Portainer CE installation
+2. Secure web interface setup
+3. Docker Swarm integration
+4. Automatic HTTPS via Traefik
+5. Container management interface
 
 ## Prerequisites
 
@@ -98,38 +120,37 @@ If you prefer to upload the scripts manually:
 
 ### 2. Run the Scripts
 
-1. First, run the server setup script:
+Run the scripts in sequence:
+
+1. Root Setup:
    ```bash
-   # On Windows (PowerShell):
-   scp server.sh root@your-server-ip:/root/
-
-   # On Linux/macOS:
-   scp server.sh root@your-server-ip:/root/
+   sudo ./part1_root_setup.sh
    ```
-
-2. Connect to your VPS:
-   ```bash
-   ssh root@your-server-ip
-   ```
-
-3. Make the script executable:
-   ```bash
-   chmod +x server.sh
-   ```
-
-4. Run the script:
-   ```bash
-   sudo ./server.sh
-   ```
-
-2. Follow the prompts to:
+   Follow the prompts to:
    - Enter a username for the new sudo user
    - Paste your SSH public key when prompted
 
-3. After the server setup is complete, you can run the Traefik setup:
+2. Reconnect with your new user and run Docker setup:
    ```bash
-   ./traefik.sh
+   ./part2_docker_setup.sh
    ```
+
+3. Configure Traefik:
+   ```bash
+   ./part3_traefik_setup.sh
+   ```
+   Follow the prompts to:
+   - Enter your domain name
+   - Provide your email for Let's Encrypt
+   - Set up dashboard credentials
+
+4. Deploy Portainer:
+   ```bash
+   ./part4_portainer_setup.sh
+   ```
+   Follow the prompts to:
+   - Configure initial admin password
+   - Set up Portainer domain
 
 ## After Installation
 
