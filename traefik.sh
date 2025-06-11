@@ -1,10 +1,10 @@
 #!/bin/bash
 
-# Traefik Reverse Proxy Installation Script for Docker Swarm - v4 Final
+# Traefik Reverse Proxy Installation Script for Docker Swarm - v5 Final
 #
 # FIX:
-# - Escapes dollar signs ('$') in the generated password hash to prevent
-#   Docker Compose interpolation errors.
+# - Explicitly defines the dashboard service and its port (8080) via labels
+#   to resolve the "port is missing" error in Traefik v3.
 #
 # It will:
 # 1. Automatically fetch the latest stable Traefik version from GitHub.
@@ -86,7 +86,6 @@ echo
 
 # 3. Generate hashed password for dashboard
 echo "### Generating hashed password for dashboard... ###"
-# FIX: Escape dollar signs in the password hash to prevent interpolation errors.
 HASHED_PASSWORD=$(openssl passwd -apr1 "$DASHBOARD_PASS" | sed 's/\$/\$\$/g')
 echo "Password hash generated and escaped."
 echo
@@ -131,11 +130,13 @@ services:
       labels:
         - "traefik.enable=true"
         - "traefik.http.routers.dashboard.rule=Host(\`$TRAEFIK_DOMAIN\`)"
-        - "traefik.http.routers.dashboard.service=api@internal"
         - "traefik.http.routers.dashboard.tls=true"
         - "traefik.http.routers.dashboard.tls.certresolver=myresolver"
         - "traefik.http.routers.dashboard.middlewares=auth"
         - "traefik.http.middlewares.auth.basicauth.users=$DASHBOARD_USER:$HASHED_PASSWORD"
+        # --- FIX: Explicitly define the service and port for the dashboard ---
+        - "traefik.http.routers.dashboard.service=dashboard-svc"
+        - "traefik.http.services.dashboard-svc.loadbalancer.server.port=8080"
 
 networks:
   $NETWORK_NAME:
