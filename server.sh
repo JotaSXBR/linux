@@ -1,13 +1,16 @@
 #!/bin/bash
 
-# Ubuntu LTS VPS Initialization Script - Professional Live-Sourced Edition (v2 - Patched)
+# Ubuntu LTS VPS Initialization Script - Lynis Hardened Edition
 #
-# This script is interactive and performs a comprehensive security setup.
-# It will prompt you for a username and your public SSH key.
+# This script incorporates hardening suggestions from a Lynis audit to provide
+# a highly secure baseline for a new server.
 #
-# FIXES in this version:
-# - Corrected SSH service name from 'sshd' to 'ssh' for Ubuntu compatibility.
-# - Replaced external auditd rules with a safer, embedded, and more compatible ruleset.
+# ENHANCEMENTS in this version:
+# - Advanced SSH hardening (disabling forwarding, limiting sessions/retries).
+# - Kernel hardening (disabling uncommon network protocols).
+# - System policy hardening (password policies, umask, disabled core dumps).
+# - Addition of a legal banner for unauthorized access.
+# - Installation of 'sysstat' and 'rkhunter' for enhanced monitoring.
 #
 # !!! IMPORTANT !!!
 # 1. Run this script with sudo privileges (e.g., sudo ./server.sh).
@@ -44,7 +47,8 @@ echo
 # 1. System Update & Prerequisite Installation
 echo "### Updating system packages and installing prerequisites... ###"
 apt-get update && apt-get upgrade -y
-apt-get install -y ca-certificates curl gnupg unattended-upgrades fail2ban auditd audispd-plugins
+# Added sysstat and rkhunter based on Lynis suggestions
+apt-get install -y ca-certificates curl gnupg unattended-upgrades fail2ban auditd audispd-plugins sysstat rkhunter
 apt-get autoremove -y
 echo "### System update complete. ###"
 echo
@@ -71,18 +75,30 @@ chmod 600 /home/"$NEW_USER"/.ssh/authorized_keys
 echo "### SSH key added for $NEW_USER. ###"
 echo
 
-# 4. Harden SSH Configuration
-echo "### Hardening SSH configuration... ###"
+# 4. Advanced SSH Hardening
+echo "### Hardening SSH configuration based on Lynis suggestions... ###"
 sed -i "s/#Port 22/Port $NEW_SSH_PORT/" /etc/ssh/sshd_config
 sed -i 's/PermitRootLogin yes/PermitRootLogin no/' /etc/ssh/sshd_config
 sed -i 's/#PasswordAuthentication yes/PasswordAuthentication no/' /etc/ssh/sshd_config
 sed -i 's/PasswordAuthentication yes/PasswordAuthentication no/' /etc/ssh/sshd_config
-# FIX 1: Use the correct service name 'ssh' for Ubuntu.
+
+# Append Lynis-recommended SSH settings
+cat <<EOF >> /etc/ssh/sshd_config
+
+# Lynis Hardening
+LogLevel VERBOSE
+X11Forwarding no
+AllowAgentForwarding no
+AllowTcpForwarding no
+MaxAuthTries 3
+MaxSessions 2
+TCPKeepAlive no
+EOF
 systemctl restart ssh.service
-echo "### SSH hardened: Port changed to $NEW_SSH_PORT, root login and password auth disabled. ###"
+echo "### SSH hardened. ###"
 echo
 
-# 5. Firewall Configuration (UFW) with SSH Rate-Limiting
+# 5. Firewall Configuration (UFW)
 echo "### Configuring UFW firewall... ###"
 ufw default deny incoming
 ufw default allow outgoing
@@ -106,43 +122,25 @@ systemctl enable fail2ban && systemctl restart fail2ban
 echo "### Fail2ban configured and enabled. ###"
 echo
 
-# 7. Configure auditd with a Compatible Ruleset
+# 7. Configure auditd
 echo "### Configuring auditd for system monitoring... ###"
-# FIX 2: Use a safer, embedded ruleset that is compatible with base Ubuntu.
 cat > /etc/audit/rules.d/99-custom.rules <<EOF
-# This file contains a baseline set of audit rules for a secure system.
-
-# Make the audit configuration immutable - reboot required to change rules
 -e 2
-
-# Increase buffer size
 -b 8192
-
-# Monitor for changes to audit rules
 -w /etc/audit/ -p wa -k audit_rules
-
-# Monitor identity and authentication files
 -w /etc/group -p wa -k identity
 -w /etc/passwd -p wa -k identity
 -w /etc/gshadow -p wa -k identity
 -w /etc/shadow -p wa -k identity
 -w /etc/security/opasswd -p wa -k identity
-
-# Monitor system configuration changes
 -w /etc/sudoers -p wa -k sudoers
 -w /etc/sudoers.d/ -p wa -k sudoers
 -w /etc/ssh/sshd_config -p wa -k sshd_config
-
-# Monitor login/logout events
 -w /var/log/faillog -p wa -k logins
 -w /var/log/lastlog -p wa -k logins
 -w /var/log/tallylog -p wa -k logins
-
-# Monitor for use of privileged commands
 -a always,exit -F arch=b64 -S execve -C uid!=euid -F euid=0 -k priv_esc
 -a always,exit -F arch=b32 -S execve -C uid!=euid -F euid=0 -k priv_esc
-
-# Monitor for unauthorized file access attempts
 -a always,exit -F arch=b64 -S open,creat,truncate -F exit=-EACCES -F auid>=1000 -F auid!=unset -k access_denied
 -a always,exit -F arch=b32 -S open,creat,truncate -F exit=-EACCES -F auid>=1000 -F auid!=unset -k access_denied
 -a always,exit -F arch=b64 -S open,creat,truncate -F exit=-EPERM -F auid>=1000 -F auid!=unset -k access_denied
@@ -153,13 +151,61 @@ systemctl enable auditd && systemctl restart auditd
 echo "### auditd configured with custom rules and enabled. ###"
 echo
 
-# 8. Enable Automatic Security Updates
+# 8. System Policy Hardening
+echo "### Applying system-wide policy hardening... ###"
+# Disable core dumps
+echo '* hard core 0' > /etc/security/limits.d/99-disable-coredumps.conf
+
+# Harden login definitions (password policy and umask)
+sed -i 's/^PASS_MAX_DAYS\s\+.*/PASS_MAX_DAYS   90/' /etc/login.defs
+sed -i 's/^PASS_MIN_DAYS\s\+.*/PASS_MIN_DAYS   7/' /etc/login.defs
+sed -i 's/^PASS_WARN_AGE\s\+.*/PASS_WARN_AGE   14/' /etc/login.defs
+sed -i 's/^UMASK\s\+.*/UMASK           027/' /etc/login.defs
+echo "SHA_CRYPT_MIN_ROUNDS 500000" >> /etc/login.defs
+echo "### System policies hardened. ###"
+echo
+
+# 9. Kernel Hardening
+echo "### Applying kernel hardening... ###"
+# Disable uncommon network protocols
+cat > /etc/modprobe.d/99-disable-uncommon-net.conf <<EOF
+install dccp /bin/true
+install sctp /bin/true
+install rds /bin/true
+install tipc /bin/true
+EOF
+echo "### Kernel hardening applied. ###"
+echo
+
+# 10. Add Legal Banner
+echo "### Adding legal banner... ###"
+cat > /etc/issue <<EOF
+*****************************************************************
+*                                                               *
+* This system is for the use of authorized users only.          *
+* Individuals using this computer system without authority, or  *
+* in excess of their authority, are subject to having all of    *
+* their activities on this system monitored and recorded.       *
+*                                                               *
+* Anyone using this system expressly consents to such           *
+* monitoring and is advised that if such monitoring reveals     *
+* possible evidence of criminal activity, system personnel may  *
+* provide the evidence of such monitoring to law enforcement    *
+* officials.                                                    *
+*                                                               *
+*****************************************************************
+EOF
+cp /etc/issue /etc/issue.net
+echo "### Legal banner added. ###"
+echo
+
+# 11. Enable Automatic Security Updates
 echo "### Enabling automatic security updates... ###"
 dpkg-reconfigure -plow unattended-upgrades
 echo "### Automatic security updates enabled. ###"
 echo
 
-# 9. Install Docker Engine and Dependencies
+# 12. Install Docker Engine and Dependencies
 echo "### Installing Docker... ###"
 install -m 0755 -d /etc/apt/keyrings
 curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
@@ -168,18 +214,18 @@ echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.
 apt-get update
 apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
 usermod -aG docker "$NEW_USER"
-echo "### Docker installed successfully. $NEW_USER added to the docker group. ###"
+echo "### Docker installed successfully. ###"
 echo
 
-# 10. Initialize Docker Swarm
+# 13. Initialize Docker Swarm
 echo "### Initializing Docker Swarm mode... ###"
 docker swarm init --advertise-addr "$SERVER_IP"
-echo "### Docker Swarm initialized. This node is now a manager. ###"
+echo "### Docker Swarm initialized. ###"
 echo "To add a worker node, run the following on another server:"
 docker swarm join-token worker | grep "docker swarm join"
 echo
 
-# 11. Install and Run Lynis Security Audit
+# 14. Install and Run Lynis Security Audit
 echo "### Installing Lynis security auditing tool... ###"
 curl -fsSL https://packages.cisofy.com/keys/cisofy-software-public.key | gpg --dearmor -o /etc/apt/keyrings/cisofy-software-public.gpg
 echo "deb [signed-by=/etc/apt/keyrings/cisofy-software-public.gpg] https://packages.cisofy.com/community/lynis/deb/ stable main" | tee /etc/apt/sources.list.d/cisofy-lynis.list
@@ -203,7 +249,7 @@ echo "--- Security & Auditing ---"
 echo "Root login is disabled. Use 'sudo' for administrative tasks."
 echo "Docker is installed and Swarm mode is active."
 echo "auditd is logging security events to /var/log/audit/audit.log."
-echo "  (Use 'ausearch -k <keyname>' or 'aureport' to inspect logs)."
+echo "rkhunter is installed. Run 'sudo rkhunter --check' for manual scans."
 echo
 echo "--- NEXT STEPS: Review Lynis Report ---"
 echo "A security scan has been performed. Review the findings for more hardening suggestions."
