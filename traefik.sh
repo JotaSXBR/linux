@@ -1,10 +1,12 @@
 #!/bin/bash
 
-# Traefik Reverse Proxy Installation Script for Docker Swarm - v5 Final
+# Traefik Reverse Proxy Installation Script for Docker Swarm - v6 Final
 #
 # FIX:
-# - Explicitly defines the dashboard service and its port (8080) via labels
-#   to resolve the "port is missing" error in Traefik v3.
+# - Reverts the dashboard router to use the reliable 'api@internal' service.
+# - Adds a separate, dummy service definition to satisfy the Swarm provider's
+#   "port is missing" check without affecting the router. This solves the
+#   504 Gateway Timeout issue.
 #
 # It will:
 # 1. Automatically fetch the latest stable Traefik version from GitHub.
@@ -129,14 +131,15 @@ services:
           - node.role == manager
       labels:
         - "traefik.enable=true"
+        # --- FIX: Route to the reliable internal service, not a self-defined one ---
+        - "traefik.http.routers.dashboard.service=api@internal"
         - "traefik.http.routers.dashboard.rule=Host(\`$TRAEFIK_DOMAIN\`)"
         - "traefik.http.routers.dashboard.tls=true"
         - "traefik.http.routers.dashboard.tls.certresolver=myresolver"
         - "traefik.http.routers.dashboard.middlewares=auth"
         - "traefik.http.middlewares.auth.basicauth.users=$DASHBOARD_USER:$HASHED_PASSWORD"
-        # --- FIX: Explicitly define the service and port for the dashboard ---
-        - "traefik.http.routers.dashboard.service=dashboard-svc"
-        - "traefik.http.services.dashboard-svc.loadbalancer.server.port=8080"
+        # --- FIX: Add a dummy service definition to satisfy the Swarm provider check ---
+        - "traefik.http.services.traefik.loadbalancer.server.port=9999" # Port doesn't matter, it's just to satisfy the check
 
 networks:
   $NETWORK_NAME:
