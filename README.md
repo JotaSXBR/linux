@@ -96,7 +96,7 @@ First, get the scripts onto your VPS using one of these methods:
 
 3. Clone this repository:
    ```bash
-   git clone https://github.com/yourusername/linux.git
+   git clone https://github.com/JotaSXBR/linux.git
    cd linux
    ```
 
