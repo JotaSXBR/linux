@@ -1,14 +1,10 @@
 #!/bin/bash
 
-# PART 1: ROOT SETUP (Definitive Edition)
-#
-# UPDATES:
-# - Restored the full, comprehensive legal banner.
-# - Added instructions on how to use Lynis to the final output.
+# PART 1: ROOT SETUP (Definitive Lynis-Hardened Edition)
 #
 # This script performs the initial server hardening, including user creation,
 # SSH hardening, firewall setup, swap file creation, and installation of
-# essential security and system tools.
+# essential security and system tools based on a Lynis audit.
 #
 # It MUST be run as the 'root' user.
 
@@ -38,15 +34,28 @@ done
 echo "----------------------------------------------------"
 echo
 
-# 1. System Update & Prerequisite Installation
+# 1. Ensure Security Repository is Active
+echo "### Ensuring security repository is active... ###"
+# For Ubuntu 24.04 (Noble Numbat). Adjust 'noble' for other versions.
+SECURITY_REPO_LINE="deb http://security.ubuntu.com/ubuntu noble-security main restricted universe multiverse"
+if ! grep -q "^deb .*noble-security" /etc/apt/sources.list /etc/apt/sources.list.d/*; then
+    echo "Security repository not found. Adding it now."
+    echo "$SECURITY_REPO_LINE" >> /etc/apt/sources.list
+else
+    echo "Security repository is already configured."
+fi
+echo
+
+# 2. System Update & Prerequisite Installation
 echo "### Updating system packages and installing prerequisites... ###"
 apt-get update && apt-get upgrade -y
-apt-get install -y ufw fail2ban auditd audispd-plugins sysstat rkhunter lynis curl jq openssl
+# Installs security tools recommended by Lynis
+apt-get install -y ufw fail2ban auditd audispd-plugins sysstat rkhunter lynis debsums apt-listbugs apt-listchanges curl jq openssl
 apt-get autoremove -y
 echo "### System update complete. ###"
 echo
 
-# 2. Create and Enable Swap File
+# 3. Create and Enable Swap File
 echo "### Creating and enabling a ${SWAP_SIZE} swap file... ###"
 if [ -f /swapfile ]; then
     echo "Swap file already exists. Skipping creation."
@@ -67,7 +76,7 @@ fi
 echo "### Swap configuration complete. ###"
 echo
 
-# 3. Create a New Sudo User
+# 4. Create a New Sudo User
 echo "### Creating new user '$NEW_USER' with sudo privileges... ###"
 if id "$NEW_USER" &>/dev/null; then
     echo "User $NEW_USER already exists. Skipping user creation."
@@ -79,7 +88,7 @@ fi
 echo "### New user setup complete. ###"
 echo
 
-# 4. SSH Key Authentication
+# 5. SSH Key Authentication
 echo "### Setting up SSH key authentication for $NEW_USER... ###"
 mkdir -p /home/"$NEW_USER"/.ssh
 echo "$PUBLIC_SSH_KEY" > /home/"$NEW_USER"/.ssh/authorized_keys
@@ -89,7 +98,7 @@ chmod 600 /home/"$NEW_USER"/.ssh/authorized_keys
 echo "### SSH key added for $NEW_USER. ###"
 echo
 
-# 5. Advanced SSH Hardening
+# 6. Advanced SSH Hardening
 echo "### Hardening SSH configuration... ###"
 sed -i "s/#Port 22/Port $NEW_SSH_PORT/" /etc/ssh/sshd_config
 sed -i 's/PermitRootLogin yes/PermitRootLogin no/' /etc/ssh/sshd_config
@@ -108,7 +117,7 @@ systemctl restart ssh.service
 echo "### SSH hardened. ###"
 echo
 
-# 6. Firewall Configuration (UFW)
+# 7. Firewall Configuration (UFW)
 echo "### Configuring UFW firewall... ###"
 ufw default deny incoming
 ufw default allow outgoing
@@ -119,12 +128,16 @@ ufw --force enable
 echo "### UFW firewall enabled and configured. ###"
 echo
 
-# 7. System Policy & Kernel Hardening
+# 8. System Policy & Kernel Hardening
 echo "### Applying system-wide policy and kernel hardening... ###"
 # Disable core dumps
 echo '* hard core 0' > /etc/security/limits.d/99-disable-coredumps.conf
 # Harden login definitions
 sed -i 's/^UMASK\s\+.*/UMASK           027/' /etc/login.defs
+sed -i 's/^ENCRYPT_METHOD\s\+.*/ENCRYPT_METHOD SHA512/' /etc/login.defs
+if ! grep -q "SHA_CRYPT_MIN_ROUNDS" /etc/login.defs; then
+    echo "SHA_CRYPT_MIN_ROUNDS 500000" >> /etc/login.defs
+fi
 # Disable uncommon network protocols
 cat > /etc/modprobe.d/99-disable-uncommon-net.conf <<EOF
 install dccp /bin/true
@@ -133,7 +146,6 @@ install rds /bin/true
 install tipc /bin/true
 EOF
 # Add Legal Banner
-# UPDATE: Restored the full legal banner.
 cat > /etc/issue <<EOF
 *****************************************************************
 *                                                               *
@@ -154,6 +166,37 @@ cp /etc/issue /etc/issue.net
 echo "### System policies and kernel hardened. ###"
 echo
 
+# 9. Configure and Load Auditd Rules
+echo "### Configuring and loading auditd rules... ###"
+cat > /etc/audit/rules.d/99-custom.rules <<EOF
+# This file contains a baseline set of audit rules for a secure system.
+-e 2
+-b 8192
+-w /etc/audit/ -p wa -k audit_rules
+-w /etc/group -p wa -k identity
+-w /etc/passwd -p wa -k identity
+-w /etc/gshadow -p wa -k identity
+-w /etc/shadow -p wa -k identity
+-w /etc/security/opasswd -p wa -k identity
+-w /etc/sudoers -p wa -k sudoers
+-w /etc/sudoers.d/ -p wa -k sudoers
+-w /etc/ssh/sshd_config -p wa -k sshd_config
+-w /var/log/faillog -p wa -k logins
+-w /var/log/lastlog -p wa -k logins
+-w /var/log/tallylog -p wa -k logins
+-a always,exit -F arch=b64 -S execve -C uid!=euid -F euid=0 -k priv_esc
+-a always,exit -F arch=b32 -S execve -C uid!=euid -F euid=0 -k priv_esc
+-a always,exit -F arch=b64 -S open,creat,truncate -F exit=-EACCES -F auid>=1000 -F auid!=unset -k access_denied
+-a always,exit -F arch=b32 -S open,creat,truncate -F exit=-EACCES -F auid>=1000 -F auid!=unset -k access_denied
+-a always,exit -F arch=b64 -S open,creat,truncate -F exit=-EPERM -F auid>=1000 -F auid!=unset -k access_denied
+-a always,exit -F arch=b32 -S open,creat,truncate -F exit=-EPERM -F auid>=1000 -F auid!=unset -k access_denied
+EOF
+augenrules --load
+# Force a restart to ensure the new rules are active.
+service auditd restart
+echo "### auditd configured with custom rules and enabled. ###"
+echo
+
 echo "####################################################################"
 echo "###          PART 1 (ROOT SETUP) COMPLETE!                       ###"
 echo "####################################################################"
@@ -164,7 +207,6 @@ echo "2. Reconnect to the server as the '$NEW_USER' user using your SSH key."
 echo "   Example: ssh -p $NEW_SSH_PORT $NEW_USER@<your_vps_ip>"
 echo "3. Once reconnected, run the 'part2_docker_setup.sh' script."
 echo
-# UPDATE: Added instructions for using the security auditing tools.
 echo "--- Security Auditing ---"
 echo "To run a manual security audit at any time, use the command:"
 echo "  sudo lynis audit system"
