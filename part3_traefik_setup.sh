@@ -1,9 +1,13 @@
 #!/bin/bash
 
-# PART 3: TRAEFIK DEPLOYMENT
+# PART 3: TRAEFIK DEPLOYMENT (v7 - The Definitive Fix)
 #
-# This script deploys Traefik using a clean configuration and
-# Docker-managed named volumes to avoid permission errors.
+# FIX: Adds a 'traefik.http.services.traefik.loadbalancer.server.port' label.
+#      This directly resolves the "port is missing" error from the Swarm provider,
+#      allowing it to correctly process the dashboard router labels. This is the
+#      root cause of the 404/502 errors.
+#
+# This script deploys Traefik using a clean configuration.
 # It MUST be run as the non-root 'deploy' user.
 
 # --- Configuration ---
@@ -17,7 +21,7 @@ DEFAULT_TRAEFIK_VERSION="v3.0" # Fallback version
 # --- Pre-flight Checks ---
 if ! docker info > /dev/null 2>&1; then
   echo "Error: Docker is not running or you don't have permission to use it."
-  echo "Please ensure you are part of the 'docker' group."
+  echo "Please ensure you have logged out and back in after running part 2."
   exit 1
 fi
 
@@ -74,10 +78,8 @@ services:
       - $NETWORK_NAME
     command:
       - "--api.dashboard=true"
-      - "--providers.docker=true"
-      - "--providers.docker.exposedByDefault=false"
-      - "--providers.docker.network=$NETWORK_NAME"
       - "--providers.swarm=true"
+      - "--providers.swarm.exposedByDefault=false"
       - "--entrypoints.web.address=:80"
       - "--entrypoints.web.http.redirections.entrypoint.to=websecure"
       - "--entrypoints.web.http.redirections.entrypoint.scheme=https"
@@ -98,8 +100,13 @@ services:
           - node.role == manager
       labels:
         - "traefik.enable=true"
-        - "traefik.http.routers.dashboard.rule=Host(\`$TRAEFIK_DOMAIN\`)"
+        # --- THE FINAL FIX ---
+        # 1. This label satisfies the Swarm provider's "port is missing" check.
+        - "traefik.http.services.traefik.loadbalancer.server.port=8080"
+        # 2. This router correctly points to the internal API service.
         - "traefik.http.routers.dashboard.service=api@internal"
+        # 3. The rest of the router and middleware configuration.
+        - "traefik.http.routers.dashboard.rule=Host(\`$TRAEFIK_DOMAIN\`)"
         - "traefik.http.routers.dashboard.tls=true"
         - "traefik.http.routers.dashboard.tls.certresolver=myresolver"
         - "traefik.http.routers.dashboard.middlewares=auth"
@@ -120,10 +127,7 @@ echo
 
 # 3. Deploy the Traefik stack
 echo "### Deploying Traefik stack '$STACK_NAME'... ###"
-# Use a subshell with the new group to run docker commands
-newgrp docker <<'END_DOCKER_DEPLOY'
 docker stack deploy -c "$COMPOSE_FILE" "$STACK_NAME"
-END_DOCKER_DEPLOY
 echo
 
 # --- Final Instructions ---
@@ -133,7 +137,8 @@ echo "####################################################################"
 echo
 echo "It may take a minute for the service to be available."
 echo "You can check the status with the command: docker stack ps $STACK_NAME"
-echo "If it fails, check the detailed log with: docker service logs ${STACK_NAME}_traefik"
+echo "To see the logs, you must now check the log file inside the volume."
+echo "Example: sudo docker exec \$(docker ps -q --filter 'name=traefik_traefik') cat /var/log/traefik/traefik.log"
 echo
 echo "Once running, access the Traefik dashboard at:"
 echo "https://$TRAEFIK_DOMAIN"
