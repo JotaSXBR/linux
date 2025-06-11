@@ -1,11 +1,10 @@
 #!/bin/bash
 
-# PART 5: POSTGRES DEPLOYMENT (v2 - with Secure Password Generation)
+# PART 5: INTERNAL-ONLY POSTGRES DEPLOYMENT
 #
-# UPDATE: If the user does not provide a password, this script will now
-#         generate a cryptographically secure one and display it.
-#
-# This script deploys a PostgreSQL database using Docker Secrets.
+# This script deploys a PostgreSQL database that is ONLY accessible to other
+# containers on the same Docker network. It is NOT exposed to the internet.
+# This is a secure-by-default architecture.
 # It MUST be run as the non-root 'deploy' user.
 
 # --- Configuration ---
@@ -23,7 +22,6 @@ fi
 
 # --- Interactive Setup ---
 echo "### PostgreSQL Secure Setup ###"
-# Securely prompt for the password without showing it on screen
 read -sp "Enter the password for the PostgreSQL database (or press Enter to generate a secure one): " POSTGRES_SECRET_VALUE
 echo
 echo "----------------------------------------------------"
@@ -34,7 +32,6 @@ echo
 # 1. Generate a password if one was not provided
 if [ -z "$POSTGRES_SECRET_VALUE" ]; then
     echo "### No password entered. Generating a secure password... ###"
-    # Use openssl to generate a random, URL-safe base64 string
     POSTGRES_SECRET_VALUE=$(openssl rand -base64 32)
     echo
     echo "****************************************************************"
@@ -125,5 +122,6 @@ echo "###          POSTGRES DEPLOYMENT COMPLETE!                       ###"
 echo "####################################################################"
 echo
 echo "The PostgreSQL database is now running securely."
+echo "It is NOT accessible from the internet."
 echo "Other services on the '$NETWORK_NAME' network can connect to it using the hostname: 'postgres'"
 echo

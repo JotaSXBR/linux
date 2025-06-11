@@ -1,13 +1,21 @@
 #!/bin/bash
 
-# PART 1: ROOT SETUP
+# PART 1: ROOT SETUP (Definitive Edition)
 #
-# This script performs the initial server hardening.
+# UPDATES:
+# - Restored the full, comprehensive legal banner.
+# - Added instructions on how to use Lynis to the final output.
+#
+# This script performs the initial server hardening, including user creation,
+# SSH hardening, firewall setup, swap file creation, and installation of
+# essential security and system tools.
+#
 # It MUST be run as the 'root' user.
 
 # --- Configuration ---
 NEW_USER="deploy"
 NEW_SSH_PORT="2222"
+SWAP_SIZE="4G"
 
 # --- Script Execution ---
 
@@ -33,12 +41,33 @@ echo
 # 1. System Update & Prerequisite Installation
 echo "### Updating system packages and installing prerequisites... ###"
 apt-get update && apt-get upgrade -y
-apt-get install -y ufw fail2ban auditd audispd-plugins sysstat rkhunter curl jq openssl
+apt-get install -y ufw fail2ban auditd audispd-plugins sysstat rkhunter lynis curl jq openssl
 apt-get autoremove -y
 echo "### System update complete. ###"
 echo
 
-# 2. Create a New Sudo User
+# 2. Create and Enable Swap File
+echo "### Creating and enabling a ${SWAP_SIZE} swap file... ###"
+if [ -f /swapfile ]; then
+    echo "Swap file already exists. Skipping creation."
+else
+    fallocate -l "$SWAP_SIZE" /swapfile
+    chmod 600 /swapfile
+    mkswap /swapfile
+    swapon /swapfile
+    # Make the swap file permanent
+    echo '/swapfile none swap sw 0 0' >> /etc/fstab
+    echo "Swap file created and enabled."
+fi
+# Tune swappiness for server performance
+if ! grep -q "vm.swappiness=10" /etc/sysctl.conf; then
+    echo "vm.swappiness=10" >> /etc/sysctl.conf
+    sysctl -p
+fi
+echo "### Swap configuration complete. ###"
+echo
+
+# 3. Create a New Sudo User
 echo "### Creating new user '$NEW_USER' with sudo privileges... ###"
 if id "$NEW_USER" &>/dev/null; then
     echo "User $NEW_USER already exists. Skipping user creation."
@@ -50,7 +79,7 @@ fi
 echo "### New user setup complete. ###"
 echo
 
-# 3. SSH Key Authentication
+# 4. SSH Key Authentication
 echo "### Setting up SSH key authentication for $NEW_USER... ###"
 mkdir -p /home/"$NEW_USER"/.ssh
 echo "$PUBLIC_SSH_KEY" > /home/"$NEW_USER"/.ssh/authorized_keys
@@ -60,7 +89,7 @@ chmod 600 /home/"$NEW_USER"/.ssh/authorized_keys
 echo "### SSH key added for $NEW_USER. ###"
 echo
 
-# 4. Advanced SSH Hardening
+# 5. Advanced SSH Hardening
 echo "### Hardening SSH configuration... ###"
 sed -i "s/#Port 22/Port $NEW_SSH_PORT/" /etc/ssh/sshd_config
 sed -i 's/PermitRootLogin yes/PermitRootLogin no/' /etc/ssh/sshd_config
@@ -79,7 +108,7 @@ systemctl restart ssh.service
 echo "### SSH hardened. ###"
 echo
 
-# 5. Firewall Configuration (UFW)
+# 6. Firewall Configuration (UFW)
 echo "### Configuring UFW firewall... ###"
 ufw default deny incoming
 ufw default allow outgoing
@@ -90,7 +119,7 @@ ufw --force enable
 echo "### UFW firewall enabled and configured. ###"
 echo
 
-# 6. System Policy & Kernel Hardening
+# 7. System Policy & Kernel Hardening
 echo "### Applying system-wide policy and kernel hardening... ###"
 # Disable core dumps
 echo '* hard core 0' > /etc/security/limits.d/99-disable-coredumps.conf
@@ -104,9 +133,21 @@ install rds /bin/true
 install tipc /bin/true
 EOF
 # Add Legal Banner
+# UPDATE: Restored the full legal banner.
 cat > /etc/issue <<EOF
 *****************************************************************
+*                                                               *
 * This system is for the use of authorized users only.          *
+* Individuals using this computer system without authority, or  *
+* in excess of their authority, are subject to having all of    *
+* their activities on this system monitored and recorded.       *
+*                                                               *
+* Anyone using this system expressly consents to such           *
+* monitoring and is advised that if such monitoring reveals     *
+* possible evidence of criminal activity, system personnel may  *
+* provide the evidence of such monitoring to law enforcement    *
+* officials.                                                    *
+*                                                               *
 *****************************************************************
 EOF
 cp /etc/issue /etc/issue.net
@@ -122,4 +163,12 @@ echo "1. Log out of this root session immediately."
 echo "2. Reconnect to the server as the '$NEW_USER' user using your SSH key."
 echo "   Example: ssh -p $NEW_SSH_PORT $NEW_USER@<your_vps_ip>"
 echo "3. Once reconnected, run the 'part2_docker_setup.sh' script."
+echo
+# UPDATE: Added instructions for using the security auditing tools.
+echo "--- Security Auditing ---"
+echo "To run a manual security audit at any time, use the command:"
+echo "  sudo lynis audit system"
+echo
+echo "To run a manual rootkit scan, use the command:"
+echo "  sudo rkhunter --check"
 echo
