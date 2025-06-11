@@ -1,29 +1,20 @@
 #!/bin/bash
 
-# Ubuntu LTS VPS Initialization Script - Professional Live-Sourced Edition
+# Ubuntu LTS VPS Initialization Script - Professional Live-Sourced Edition (v2 - Patched)
 #
 # This script is interactive and performs a comprehensive security setup.
 # It will prompt you for a username and your public SSH key.
 #
-# FEATURES:
-# 1. System Updates: Ensures all packages are current.
-# 2. Sudo User: Creates a new user with sudo privileges.
-# 3. SSH Hardening: Disables root login, password auth, and sets a custom port.
-# 4. UFW Firewall: Configures a stateful firewall with SSH rate-limiting.
-# 5. Fail2ban: Protects against brute-force attacks on services.
-# 6. auditd: Installs and configures the Linux Audit Daemon, pulling a best-practice
-#    ruleset directly from a trusted online source.
-# 7. Automatic Updates: Enables unattended security upgrades.
-# 8. Docker & Swarm: Installs the latest Docker Engine and initializes Swarm mode.
-# 9. Lynis: Installs the security auditing tool and performs a baseline scan.
+# FIXES in this version:
+# - Corrected SSH service name from 'sshd' to 'ssh' for Ubuntu compatibility.
+# - Replaced external auditd rules with a safer, embedded, and more compatible ruleset.
 #
 # !!! IMPORTANT !!!
-# 1. Run this script with sudo privileges (e.g., sudo ./setup_vps.sh).
+# 1. Run this script with sudo privileges (e.g., sudo ./server.sh).
 # 2. Generate an SSH key on your LOCAL computer and have the PUBLIC key ready to paste.
 
 # --- Configuration ---
 NEW_SSH_PORT="2222" # Change to a random, non-standard port if desired
-AUDITD_RULES_URL="https://raw.githubusercontent.com/neo23x0/auditd/master/audit.rules"
 
 # --- Script Execution ---
 
@@ -86,7 +77,8 @@ sed -i "s/#Port 22/Port $NEW_SSH_PORT/" /etc/ssh/sshd_config
 sed -i 's/PermitRootLogin yes/PermitRootLogin no/' /etc/ssh/sshd_config
 sed -i 's/#PasswordAuthentication yes/PasswordAuthentication no/' /etc/ssh/sshd_config
 sed -i 's/PasswordAuthentication yes/PasswordAuthentication no/' /etc/ssh/sshd_config
-systemctl restart sshd
+# FIX 1: Use the correct service name 'ssh' for Ubuntu.
+systemctl restart ssh.service
 echo "### SSH hardened: Port changed to $NEW_SSH_PORT, root login and password auth disabled. ###"
 echo
 
@@ -97,11 +89,10 @@ ufw default allow outgoing
 ufw limit "$NEW_SSH_PORT"/tcp
 ufw allow http
 ufw allow https
-# Docker Swarm ports (only needed if you add more nodes)
-ufw allow 2377/tcp # Swarm management
-ufw allow 7946/tcp # Container network discovery
-ufw allow 7946/udp # Container network discovery
-ufw allow 4789/udp # Overlay network traffic
+ufw allow 2377/tcp
+ufw allow 7946/tcp
+ufw allow 7946/udp
+ufw allow 4789/udp
 ufw --force enable
 echo "### UFW firewall enabled and configured. ###"
 echo
@@ -115,19 +106,51 @@ systemctl enable fail2ban && systemctl restart fail2ban
 echo "### Fail2ban configured and enabled. ###"
 echo
 
-# 7. Configure auditd with Best-Practice Rules from a Live Source
+# 7. Configure auditd with a Compatible Ruleset
 echo "### Configuring auditd for system monitoring... ###"
-echo "### Downloading latest auditd ruleset from $AUDITD_RULES_URL..."
-if curl -sS -o /etc/audit/rules.d/99-custom.rules "$AUDITD_RULES_URL"; then
-    # Make the audit configuration immutable (reboot required to change rules)
-    sed -i '/^-e 2/s/^#//' /etc/audit/rules.d/99-custom.rules
-    echo "### Ruleset downloaded. Loading rules..."
-    augenrules --load
-    systemctl enable auditd && systemctl restart auditd
-    echo "### auditd configured with custom rules and enabled. ###"
-else
-    echo "!!! WARNING: Could not download auditd rules. Skipping auditd configuration. !!!"
-fi
+# FIX 2: Use a safer, embedded ruleset that is compatible with base Ubuntu.
+cat > /etc/audit/rules.d/99-custom.rules <<EOF
+# This file contains a baseline set of audit rules for a secure system.
+
+# Make the audit configuration immutable - reboot required to change rules
+-e 2
+
+# Increase buffer size
+-b 8192
+
+# Monitor for changes to audit rules
+-w /etc/audit/ -p wa -k audit_rules
+
+# Monitor identity and authentication files
+-w /etc/group -p wa -k identity
+-w /etc/passwd -p wa -k identity
+-w /etc/gshadow -p wa -k identity
+-w /etc/shadow -p wa -k identity
+-w /etc/security/opasswd -p wa -k identity
+
+# Monitor system configuration changes
+-w /etc/sudoers -p wa -k sudoers
+-w /etc/sudoers.d/ -p wa -k sudoers
+-w /etc/ssh/sshd_config -p wa -k sshd_config
+
+# Monitor login/logout events
+-w /var/log/faillog -p wa -k logins
+-w /var/log/lastlog -p wa -k logins
+-w /var/log/tallylog -p wa -k logins
+
+# Monitor for use of privileged commands
+-a always,exit -F arch=b64 -S execve -C uid!=euid -F euid=0 -k priv_esc
+-a always,exit -F arch=b32 -S execve -C uid!=euid -F euid=0 -k priv_esc
+
+# Monitor for unauthorized file access attempts
+-a always,exit -F arch=b64 -S open,creat,truncate -F exit=-EACCES -F auid>=1000 -F auid!=unset -k access_denied
+-a always,exit -F arch=b32 -S open,creat,truncate -F exit=-EACCES -F auid>=1000 -F auid!=unset -k access_denied
+-a always,exit -F arch=b64 -S open,creat,truncate -F exit=-EPERM -F auid>=1000 -F auid!=unset -k access_denied
+-a always,exit -F arch=b32 -S open,creat,truncate -F exit=-EPERM -F auid>=1000 -F auid!=unset -k access_denied
+EOF
+augenrules --load
+systemctl enable auditd && systemctl restart auditd
+echo "### auditd configured with custom rules and enabled. ###"
 echo
 
 # 8. Enable Automatic Security Updates
