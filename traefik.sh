@@ -1,10 +1,10 @@
 #!/bin/bash
 
-# Traefik Reverse Proxy Installation Script for Docker Swarm - v3 Corrected
+# Traefik Reverse Proxy Installation Script for Docker Swarm - v4 Final
 #
 # FIX:
-# - Updated the command flags to be compatible with Traefik v3.
-# - Removed '--providers.docker.swarmMode' and added '--providers.swarm'.
+# - Escapes dollar signs ('$') in the generated password hash to prevent
+#   Docker Compose interpolation errors.
 #
 # It will:
 # 1. Automatically fetch the latest stable Traefik version from GitHub.
@@ -86,8 +86,9 @@ echo
 
 # 3. Generate hashed password for dashboard
 echo "### Generating hashed password for dashboard... ###"
-HASHED_PASSWORD=$(openssl passwd -apr1 "$DASHBOARD_PASS")
-echo "Password hash generated."
+# FIX: Escape dollar signs in the password hash to prevent interpolation errors.
+HASHED_PASSWORD=$(openssl passwd -apr1 "$DASHBOARD_PASS" | sed 's/\$/\$\$/g')
+echo "Password hash generated and escaped."
 echo
 
 # 4. Create the traefik.yml file
@@ -111,10 +112,8 @@ services:
       - "--api.dashboard=true"
       - "--providers.docker=true"
       - "--providers.docker.exposedByDefault=false"
-      # --- V3 SWARM PROVIDER CONFIGURATION ---
       - "--providers.swarm=true"
       - "--providers.swarm.exposedByDefault=false"
-      # --- END V3 CONFIGURATION ---
       - "--entrypoints.web.address=:80"
       - "--entrypoints.web.http.redirections.entrypoint.to=websecure"
       - "--entrypoints.web.http.redirections.entrypoint.scheme=https"
@@ -147,7 +146,7 @@ echo
 
 # 5. Deploy the Traefik stack
 echo "### Deploying Traefik stack '$STACK_NAME'... ###"
-docker stack deploy -c "$COMPOSE_FILE" "$STACK_NAME"
+sudo docker stack deploy -c "$COMPOSE_FILE" "$STACK_NAME"
 echo
 
 # --- Final Instructions ---
