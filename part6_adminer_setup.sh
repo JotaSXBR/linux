@@ -33,7 +33,7 @@ version: '3.8'
 
 services:
   adminer:
-    image: adminer
+    image: adminer:latest
     networks:
       - $NETWORK_NAME
     deploy:
