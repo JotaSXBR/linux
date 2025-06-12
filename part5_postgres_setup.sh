@@ -1,10 +1,12 @@
 #!/bin/bash
 
-# PART 5: INTERNAL-ONLY POSTGRES DEPLOYMENT
+# PART 5: POSTGRES DEPLOYMENT (v3 - with Safe Password Generation)
 #
-# This script deploys a PostgreSQL database that is ONLY accessible to other
-# containers on the same Docker network. It is NOT exposed to the internet.
-# This is a secure-by-default architecture.
+# UPDATE: Uses 'openssl rand -hex' to generate a universally safe password
+#         that contains no special characters, preventing issues with web UIs
+#         like Adminer.
+#
+# This script deploys a PostgreSQL database using Docker Secrets.
 # It MUST be run as the non-root 'deploy' user.
 
 # --- Configuration ---
@@ -31,15 +33,17 @@ echo
 
 # 1. Generate a password if one was not provided
 if [ -z "$POSTGRES_SECRET_VALUE" ]; then
-    echo "### No password entered. Generating a secure password... ###"
-    POSTGRES_SECRET_VALUE=$(openssl rand -base64 32)
+    echo "### No password entered. Generating a secure, URL-safe password... ###"
+    # FIX: Use 'openssl rand -hex' to generate a password with only 0-9 and a-f.
+    # This is universally safe for web forms and connection strings.
+    POSTGRES_SECRET_VALUE=$(openssl rand -hex 32)
     echo
-    echo "****************************************************************"
+    echo "******************************************************************"
     echo "SAVE THIS PASSWORD! This is your new PostgreSQL password:"
     echo
     echo "  $POSTGRES_SECRET_VALUE"
     echo
-    echo "****************************************************************"
+    echo "******************************************************************"
     echo
 fi
 
@@ -122,6 +126,5 @@ echo "###          POSTGRES DEPLOYMENT COMPLETE!                       ###"
 echo "####################################################################"
 echo
 echo "The PostgreSQL database is now running securely."
-echo "It is NOT accessible from the internet."
 echo "Other services on the '$NETWORK_NAME' network can connect to it using the hostname: 'postgres'"
 echo
