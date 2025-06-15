@@ -130,6 +130,11 @@ echo
 
 # 8. System Policy & Kernel Hardening
 echo "### Applying system-wide policy and kernel hardening... ###"
+      # Recommended for Redis to prevent issues during background saves
+if ! grep -q "vm.overcommit_memory=1" /etc/sysctl.conf; then
+    echo "vm.overcommit_memory=1" >> /etc/sysctl.conf
+    sysctl -p
+fi
 # Disable core dumps
 echo '* hard core 0' > /etc/security/limits.d/99-disable-coredumps.conf
 # Harden login definitions

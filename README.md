@@ -80,20 +80,103 @@ This script deploys the Portainer management UI.
 5.  Follow the prompts to configure your Portainer domain.
 6.  Once complete, Portainer will be running and accessible at the domain you provided.
 
-## Deploying Additional Applications
+### Part 5: Deploy PostgreSQL (as `deploy`)
 
-The `part4_portainer_setup.sh` and `part5_postgres_setup.sh` scripts serve as the template for all future applications. The pattern is:
+This script deploys a secure PostgreSQL database server.
 
-1.  Create a new script (e.g., `partX_myapp_setup.sh`).
-2.  In the script, create a dedicated Docker-managed volume for your application's persistent data (`docker volume create myapp_data`).
-3.  If the application needs passwords or API keys, create Docker Secrets for them (`docker secret create ...`).
-4.  Generate a `docker-compose.yml` file that includes Traefik labels for routing and tells the service to use the volumes and secrets you created.
-5.  Deploy the stack with `docker stack deploy`.
+1.  Create the script file: `nano part5_postgres_setup.sh`
+2.  Copy the content of `part5_postgres_setup.sh` into the file and save it.
+3.  Make the script executable: `chmod +x part5_postgres_setup.sh`
+4.  Run the script: `./part5_postgres_setup.sh`
+5.  Follow the prompts to configure your PostgreSQL credentials.
+6.  The script will create a secure PostgreSQL instance with Docker secrets management.
+
+### Part 6: Deploy Redis (as `deploy`)
+
+This script deploys a Redis server with password protection.
+
+1.  Create the script file: `nano part7_redis_setup.sh`
+2.  Copy the content of `part7_redis_setup.sh` into the file and save it.
+3.  Make the script executable: `chmod +x part7_redis_setup.sh`
+4.  Run the script: `./part7_redis_setup.sh`
+5.  Follow the prompts to set up Redis with password protection.
+6.  The script will create a secure Redis instance with Docker secrets management.
+
+### Part 7: Deploy PgAdmin (as `deploy`)
+
+This script deploys PgAdmin, a web-based PostgreSQL administration tool.
+
+1.  Create the script file: `nano part8_pgadmin_setup.sh`
+2.  Copy the content of `part8_pgadmin_setup.sh` into the file and save it.
+3.  Make the script executable: `chmod +x part8_pgadmin_setup.sh`
+4.  Run the script: `./part8_pgadmin_setup.sh`
+5.  Follow the prompts to configure your PgAdmin domain and credentials.
+6.  Once complete, PgAdmin will be accessible at the domain you provided.
+
+### Part 8: Deploy MinIO (as `deploy`)
+
+This script deploys MinIO, an S3-compatible object storage server.
+
+1.  Create the script file: `nano part9_minio_setup.sh`
+2.  Copy the content of `part9_minio_setup.sh` into the file and save it.
+3.  Make the script executable: `chmod +x part9_minio_setup.sh`
+4.  Run the script: `./part9_minio_setup.sh`
+5.  Follow the prompts to configure your MinIO domain and access credentials.
+6.  Once complete, MinIO will be accessible at the domain you provided.
+
+### Part 9: Deploy Evolution API (as `deploy`)
+
+This script deploys the Evolution API with integration to PostgreSQL, Redis, and MinIO.
+
+1.  Create the script file: `nano part10_evolution_setup.sh`
+2.  Copy the content of `part10_evolution_setup.sh` into the file and save it.
+3.  Make the script executable: `chmod +x part10_evolution_setup.sh`
+4.  Run the script: `./part10_evolution_setup.sh`
+5.  Follow the prompts to configure your Evolution API domain and credentials.
+6.  The script will automatically integrate with the previously deployed services.
+
+## Infrastructure Overview
+
+The complete infrastructure includes:
+
+- **Traefik**: Reverse proxy and SSL termination
+- **Portainer**: Docker management UI
+- **PostgreSQL**: Primary database server
+- **Redis**: In-memory cache and message broker
+- **PgAdmin**: PostgreSQL administration interface
+- **MinIO**: S3-compatible object storage
+- **Evolution API**: API service with full infrastructure integration
+
+Each component is:
+- Deployed as a Docker Swarm service
+- Protected by Traefik's SSL/TLS encryption
+- Configured with Docker secrets for sensitive data
+- Using Docker volumes for persistent storage
+- Accessible via custom domains through Traefik
 
 ## Day-to-Day Management
 
 *   **Check Stack Status:** `docker stack ps <stack_name>` (e.g., `docker stack ps traefik`)
 *   **View Service Logs:** `docker service logs <stack_name>_<service_name>`
 *   **Update an Application:** To update an application's image version, edit the corresponding `partX_..._setup.sh` script, change the `image:` tag in the YAML block, and re-run the script. This ensures your Git repository always reflects the true state of your server.
+
+## Backup Considerations
+
+Important directories and volumes to backup:
+
+- PostgreSQL data: `postgres_data` volume
+- MinIO data: `minio_data` volume
+- Evolution API instances: `evolution_data` volume
+- Redis data: `redis_data` volume (if persistence is enabled)
+
+Use Docker's volume backup capabilities or configure automated backups using the respective service's backup tools.
+
+## Security Notes
+
+- All services are only accessible through HTTPS
+- Passwords and sensitive data are managed via Docker secrets
+- Each service runs in isolation with its own network namespace
+- Inter-service communication is controlled via Docker networks
+- Regular updates should be performed on both the host system and containers
 
 This setup provides a professional-grade foundation for hosting modern containerized applications securely and reliably.
